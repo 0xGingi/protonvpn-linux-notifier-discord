@@ -23,6 +23,10 @@ function loadState() {
     if (existsSync(stateFilePath)) {
         try {
             const data = readFileSync(stateFilePath, 'utf-8');
+            if (!data) {
+                console.warn('State file is empty, returning empty state.');
+                return {};
+            }
             return JSON.parse(data);
         } catch (error) {
             console.error('Error reading or parsing state file:', error);
@@ -42,7 +46,7 @@ function saveState(state) {
 
 function parseHtml(html) {
     const entries = {};
-    const regex = /<a href="([^"]+)\/?>[^<]*<\/a>\s+([\d]{2}-[A-Za-z]{3}-[\d]{4} [\d]{2}:[\d]{2})/g;
+    const regex = /<a href="([^"]+)">.*?<\/a>\s+([\d]{2}-[A-Za-z]{3}-[\d]{4} [\d]{2}:[\d]{2})/g;
     let match;
 
     while ((match = regex.exec(html)) !== null) {
@@ -51,6 +55,7 @@ function parseHtml(html) {
         const timestamp = match[2];
         entries[name] = timestamp;
     }
+    console.log('Parsed Entries:', JSON.stringify(entries));
     return entries;
 }
 
@@ -66,21 +71,29 @@ async function checkForUpdates() {
         const currentState = parseHtml(html);
         const previousState = loadState();
 
+        console.log('Previous State:', JSON.stringify(previousState));
+        console.log('Current State:', JSON.stringify(currentState));
+
         const changes = [];
         const allKeys = new Set([...Object.keys(previousState), ...Object.keys(currentState)]);
 
         for (const key of allKeys) {
-            if (!previousState[key] && currentState[key]) {
+            const inPrevious = previousState.hasOwnProperty(key);
+            const inCurrent = currentState.hasOwnProperty(key);
+
+            if (inCurrent && !inPrevious) {
                 changes.push(`🆕 Added: \`${key}\` (${currentState[key]})`);
-            }
-            else if (previousState[key] !== currentState[key]) {
+            } else if (!inCurrent && inPrevious) {
+                changes.push(`🗑️ Deleted: \`${key}\` (${previousState[key]})`);
+            } else if (inCurrent && inPrevious && previousState[key] !== currentState[key]) {
                 changes.push(`🔄 Updated: \`${key}\` (${previousState[key]} -> ${currentState[key]})`);
             }
         }
 
+        console.log(`Detected ${changes.length} changes.`);
+
         if (changes.length > 0) {
             console.log('Changes detected:', changes);
-            saveState(currentState);
 
             const channel = await client.channels.fetch(channelId);
             if (channel instanceof TextChannel) {
@@ -104,6 +117,9 @@ async function checkForUpdates() {
         } else {
             console.log('No changes detected.');
         }
+        
+        saveState(currentState); 
+
     } catch (error) {
         console.error('Error checking for updates:', error);
     }
