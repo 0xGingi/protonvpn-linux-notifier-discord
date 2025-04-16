@@ -1,0 +1,9 @@
+services:
+  proton-update-notifier:
+    build: .
+    container_name: protonvpn-update-notifier
+    env_file:
+      - .env
+    volumes:
+      - ./state.json:/usr/src/app/state.json
+    restart: unless-stopped 
